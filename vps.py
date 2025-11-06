@@ -358,6 +358,31 @@ def compute_vps_and_lines(
             cand = np.asarray(cand, float); cw = np.asarray(cw, float)
             vz_pt = (cand * cw[:,None]).sum(axis=0) / (cw.sum()+1e-12)
             vps.append(np.array([vz_pt[0], vz_pt[1], 1.0], float)); vz_idx = len(vps)-1
+
+    # ---- SVD rescue for Z if still missing or intersections were unstable
+    if (vz_idx is None):
+        # choose candidate "vertical" lines: far from floor axes or near wall axis
+        LS = np.asarray(lines, float)
+        if wall_axis is not None:
+            sel = np.where(np.array([angsep(d, wall_axis) for d in dirs]) <= math.radians(12.0))[0]
+        elif len(floor_axes) >= 1:
+            def far_from_floor(d): 
+                return min([angsep(d, a) for a in (floor_axes[:2] if len(floor_axes)>=2 
+                                                else [floor_axes[0], (floor_axes[0]+np.pi/2.0)%np.pi])]) >= math.radians(15.0)
+            sel = np.where(np.array([far_from_floor(d) for d in dirs]))[0]
+        else:
+            sel = np.arange(len(dirs))
+
+        if len(sel) >= 4:
+            try:
+                A = LS[sel].astype(np.float64)
+                _, _, VT = np.linalg.svd(A, full_matrices=False)
+                v = VT[-1, :]
+                if np.isfinite(v).all() and abs(v[2]) >= 1e-12:
+                    vz_pt = np.array([v[0]/v[2], v[1]/v[2], 1.0], float)
+                    vps.append(vz_pt); vz_idx = len(vps)-1
+            except np.linalg.LinAlgError:
+                pass
     # ================== END FALLBACKS ==================
 
     # --------- RELABEL AFTER FALLBACKS (key fix)
