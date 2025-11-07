@@ -145,7 +145,8 @@ def compute_vps_and_lines(
     max_keep=700, min_len_frac=0.045, score_bias=0.35,
     max_boundary_px=None, max_boundary_frac=0.00, boundary_dilate_px=2,
     min_pair_angle_deg=10.0, cluster_radius_frac=0.035, min_intersections_per_vp=20,
-    axis_valid_frac=0.60
+    axis_valid_frac=0.60,
+    debug_dir=None
 ):
     # --- LSD and intersections
     lines, segs, lens = _lsd_lines_global(
@@ -396,7 +397,8 @@ def compute_vps_and_lines(
             for i in np.where(lab == k)[0]:
                 x1, y1, x2, y2 = segs[i].astype(int)
                 cv.line(lab_vis, (x1, y1), (x2, y2), int(col), 1)
-        imwrite_ok(os.path.join("outputs","labels_debug.png"), lab_vis, "labels_debug")
+        target = os.path.join(debug_dir, "labels_debug.png") if debug_dir is not None else os.path.join("outputs", "labels_debug.png")
+        imwrite_ok(target, lab_vis, "labels_debug")
 
     vpx = vps[fx_idx] if fx_idx is not None else None
     vpy = vps[fy_idx] if fy_idx is not None else None
@@ -510,16 +512,20 @@ def main():
     ap.add_argument("--axis_valid_frac", type=float, default=0.60)
     args = ap.parse_args()
 
-    os.makedirs(args.out_dir, exist_ok=True)
+    img_name = os.path.basename(args.image)
+    base_out_dir = os.path.join(args.out_dir, img_name)
+    planes_dir = os.path.join(base_out_dir, "planes")
+    vps_dir = os.path.join(base_out_dir, "vps")
+    os.makedirs(vps_dir, exist_ok=True)
 
     img = cv.imread(args.image, cv.IMREAD_COLOR)
     if img is None:
         raise SystemExit(f"Cannot read image: {args.image}")
 
     # Load masks produced by planes.py
-    floor_clean_p = os.path.join(args.out_dir, "floor_clean.png")
-    wall_clean_p  = os.path.join(args.out_dir, "wall_clean.png")
-    empty_floor_p = os.path.join(args.out_dir, "empty_floor.png")
+    floor_clean_p = os.path.join(planes_dir, "floor_clean.png")
+    wall_clean_p  = os.path.join(planes_dir, "wall_clean.png")
+    empty_floor_p = os.path.join(vps_dir, "empty_floor.png")
 
     floor_m = cv.imread(floor_clean_p, cv.IMREAD_GRAYSCALE)
     wall_m  = cv.imread(wall_clean_p,  cv.IMREAD_GRAYSCALE)
@@ -539,7 +545,7 @@ def main():
 
     # still build empty room for computation
     empty_floor = make_empty_room_floor(floor_m, wall_m, feet_mask=None)
-    imwrite_ok(os.path.join(args.out_dir, "empty_floor.png"), empty_floor, "empty_floor")
+    imwrite_ok(os.path.join(vps_dir, "empty_floor.png"), empty_floor, "empty_floor")
 
     # VPs + lines (use empty_floor for geometry)
     vps, lines_for_overlay = compute_vps_and_lines(
@@ -548,18 +554,19 @@ def main():
         max_keep=args.max_keep, min_len_frac=args.min_len_frac,
         score_bias=args.score_bias, max_boundary_px=None,
         max_boundary_frac=0.45, boundary_dilate_px=2,
-        axis_valid_frac=args.axis_valid_frac
+        axis_valid_frac=args.axis_valid_frac,
+        debug_dir=vps_dir
     )
 
     # Draw overlay with the original cleaned floor mask for visual parity
     vp_overlay = draw_overlay(img, floor_m, lines_for_overlay, vps)
-    imwrite_ok(os.path.join(args.out_dir, "vp_overlay.png"), vp_overlay, "vp_overlay")
+    imwrite_ok(os.path.join(vps_dir, "vp_overlay.png"), vp_overlay, "vp_overlay")
 
     if empty_floor is None:
         if floor_m is None:
             raise SystemExit("[ERROR] Need floor_clean.png or empty_floor.png in outputs/")
         empty_floor = make_empty_room_floor(floor_m, wall_m, feet_mask=None)
-        imwrite_ok(os.path.join(args.out_dir, "empty_floor.png"), empty_floor, "empty_floor")
+        imwrite_ok(os.path.join(vps_dir, "empty_floor.png"), empty_floor, "empty_floor")
 
     # Compute VPs and draw overlay
     vps, lines_for_overlay = compute_vps_and_lines(
@@ -568,20 +575,21 @@ def main():
         max_keep=args.max_keep, min_len_frac=args.min_len_frac,
         score_bias=args.score_bias, max_boundary_px=None,
         max_boundary_frac=0.45, boundary_dilate_px=2,
-        axis_valid_frac=args.axis_valid_frac
+        axis_valid_frac=args.axis_valid_frac,
+        debug_dir=vps_dir
     )
     print(f"[VP px] X={_vp_px(vps['x'])}  Y={_vp_px(vps['y'])}  Z={_vp_px(vps['z'])}")
 
     vp_overlay = draw_overlay(img, empty_floor, lines_for_overlay, vps)
-    imwrite_ok(os.path.join(args.out_dir, "vp_overlay.png"), vp_overlay, "vp_overlay")
+    imwrite_ok(os.path.join(vps_dir, "vp_overlay.png"), vp_overlay, "vp_overlay")
 
     # Save VPs for bev.py
     def as_list(v):
         return None if v is None else [float(v[0]), float(v[1]), float(v[2])]
-    with open(os.path.join(args.out_dir, "vps.json"), "w") as f:
+    with open(os.path.join(vps_dir, "vps.json"), "w") as f:
         json.dump({"x": as_list(vps['x']), "y": as_list(vps['y']), "z": as_list(vps['z'])}, f, indent=2)
 
-    print("[DONE] VPs saved to", os.path.abspath(os.path.join(args.out_dir, "vps.json")))
+    print("[DONE] VPs saved to", os.path.abspath(os.path.join(vps_dir, "vps.json")))
 
 if __name__ == "__main__":
     main()

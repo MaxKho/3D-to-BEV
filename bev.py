@@ -59,15 +59,19 @@ def main():
     ap.add_argument("--bev_width", type=int, default=1500)
     args = ap.parse_args()
 
-    os.makedirs(args.out_dir, exist_ok=True)
+    img_name = os.path.basename(args.image)
+    base_out_dir = os.path.join(args.out_dir, img_name)
+    vps_dir = os.path.join(base_out_dir, "vps")
+    bev_dir = os.path.join(base_out_dir, "bev")
+    os.makedirs(bev_dir, exist_ok=True)
     img = cv.imread(args.image, cv.IMREAD_COLOR)
     if img is None: raise SystemExit(f"Cannot read image: {args.image}")
 
-    floor_mask = cv.imread(os.path.join(args.out_dir, "empty_floor.png"), cv.IMREAD_GRAYSCALE)
+    floor_mask = cv.imread(os.path.join(vps_dir, "empty_floor.png"), cv.IMREAD_GRAYSCALE)
     if floor_mask is None or (floor_mask>0).sum()==0:
         raise SystemExit("[ERROR] empty_floor.png missing. Run step2 first.")
 
-    with open(os.path.join(args.out_dir, "vps.json"), "r") as f:
+    with open(os.path.join(vps_dir, "vps.json"), "r") as f:
         vp_data = json.load(f)
 
     def _from_list(v):
@@ -82,9 +86,9 @@ def main():
         raise SystemExit("[BEV] skipped: floor VPs ill-conditioned or missing")
 
     bev, occ, _ = bev_from_floor_quad(img, floor_mask, vps, out_w=args.bev_width)
-    imwrite_ok(os.path.join(args.out_dir, "bev.png"), bev, "bev")
-    imwrite_ok(os.path.join(args.out_dir, "occ.png"), occ, "occ")
-    print("[DONE] outputs ->", os.path.abspath(args.out_dir))
+    imwrite_ok(os.path.join(bev_dir, "bev.png"), bev, "bev")
+    imwrite_ok(os.path.join(bev_dir, "occ.png"), occ, "occ")
+    print("[DONE] outputs ->", os.path.abspath(bev_dir))
 
 if __name__ == "__main__":
     main()

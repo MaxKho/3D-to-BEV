@@ -97,7 +97,10 @@ def main():
     ap.add_argument("--min_wall_area", type=int, default=1200)
     args = ap.parse_args()
 
-    os.makedirs(args.out_dir, exist_ok=True)
+    img_name = os.path.basename(args.image)
+    base_out_dir = os.path.join(args.out_dir, img_name)
+    planes_out_dir = os.path.join(base_out_dir, "planes")
+    os.makedirs(planes_out_dir, exist_ok=True)
     device = "cpu" if (args.cpu or not torch.cuda.is_available()) else "cuda"
 
     img = cv.imread(args.image, cv.IMREAD_COLOR)
@@ -106,9 +109,9 @@ def main():
     processor, model, id2label, label2id = load_model(device)
     pred = run_segmentation(img, processor, model, device)
 
-    dump_unique(pred, os.path.join(args.out_dir, "pred_ids.txt"))
+    dump_unique(pred, os.path.join(planes_out_dir, "pred_ids.txt"))
     pred_vis = np.stack([(pred*37)%255, (pred*17)%255, (pred*97)%255], axis=-1).astype(np.uint8)
-    imwrite_ok(os.path.join(args.out_dir, "pred_vis.png"), pred_vis, "pred_vis")
+    imwrite_ok(os.path.join(planes_out_dir, "pred_vis.png"), pred_vis, "pred_vis")
 
     def find_ids_by_prefix(prefix, label2id, id2label):
         p = prefix.lower()
@@ -126,22 +129,22 @@ def main():
     floor_raw = (np.isin(pred, floor_ids).astype(np.uint8)*255) if floor_ids else None
     wall_raw  = (np.isin(pred, wall_ids ).astype(np.uint8)*255) if wall_ids  else None
     ceil_raw  = (np.isin(pred, ceil_ids).astype(np.uint8)*255) if ceil_ids else None
-    imwrite_ok(os.path.join(args.out_dir, "floor_raw.png"), floor_raw, "floor_raw") if floor_raw is not None else None
-    imwrite_ok(os.path.join(args.out_dir, "wall_raw.png" ), wall_raw , "wall_raw" ) if wall_raw  is not None else None
-    imwrite_ok(os.path.join(args.out_dir, "ceiling_raw.png"), ceil_raw, "ceiling_raw") if ceil_raw is not None else None
+    imwrite_ok(os.path.join(planes_out_dir, "floor_raw.png"), floor_raw, "floor_raw") if floor_raw is not None else None
+    imwrite_ok(os.path.join(planes_out_dir, "wall_raw.png" ), wall_raw , "wall_raw" ) if wall_raw  is not None else None
+    imwrite_ok(os.path.join(planes_out_dir, "ceiling_raw.png"), ceil_raw, "ceiling_raw") if ceil_raw is not None else None
 
     floor_m = clean_mask(floor_raw) if floor_raw is not None else None
     wall_m  = clean_mask(wall_raw ) if wall_raw  is not None else None
     ceil_m  = clean_mask(ceil_raw ) if ceil_raw  is not None else None
-    imwrite_ok(os.path.join(args.out_dir, "floor_clean.png"), floor_m, "floor_clean") if floor_m is not None else None
-    imwrite_ok(os.path.join(args.out_dir, "wall_clean.png" ), wall_m , "wall_clean" ) if wall_m  is not None else None
-    imwrite_ok(os.path.join(args.out_dir, "ceiling_clean.png"), ceil_m, "ceiling_clean") if ceil_m is not None else None
+    imwrite_ok(os.path.join(planes_out_dir, "floor_clean.png"), floor_m, "floor_clean") if floor_m is not None else None
+    imwrite_ok(os.path.join(planes_out_dir, "wall_clean.png" ), wall_m , "wall_clean" ) if wall_m  is not None else None
+    imwrite_ok(os.path.join(planes_out_dir, "ceiling_clean.png"), ceil_m, "ceiling_clean") if ceil_m is not None else None
 
     wall_instances = []
     if wall_m is not None:
         wall_instances = split_instances(wall_m, min_area=args.min_wall_area)
     planes_overlay = overlay_planes(img, floor_m, wall_instances, ceil_m, alpha=0.35, edge=2)
-    imwrite_ok(os.path.join(args.out_dir, "planes_overlay.png"), planes_overlay, "planes_overlay")
+    imwrite_ok(os.path.join(planes_out_dir, "planes_overlay.png"), planes_overlay, "planes_overlay")
 
 if __name__ == "__main__":
     main()
